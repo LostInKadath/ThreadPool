@@ -11,7 +11,10 @@ public:
 class ThreadPoolFixture : public ::testing::Test
 {
 public:
-
+	ThreadPoolFixture()
+		: pool(std::thread::hardware_concurrency())
+	{
+	}
 protected:
 	ThreadPool pool;
 	::testing::NiceMock<Handlers> mocker;

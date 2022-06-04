@@ -3,7 +3,10 @@
 
 TEST(ThreadPool, NoThreads)
 {
-	ThreadPool pool(0);
+	ASSERT_THROW([]
+	{
+		ThreadPool pool(0);
+	}(), std::invalid_argument);
 }
 
 TEST(ThreadPool, LongTask_ReturnsVoid_Destruction)

@@ -4,10 +4,10 @@
 #include <future>
 #include <vector>
 
-class ThreadPool
+class ThreadPool final
 {
 	template <typename Type>
-	class Queue
+	class TasksQueue
 	{
 	public:
 		void push(Type&& value)
@@ -33,9 +33,8 @@ class ThreadPool
 	};
 
 public:
-	ThreadPool(size_t threads = std::thread::hardware_concurrency());
-
-	virtual ~ThreadPool();
+	explicit ThreadPool(size_t threads);
+	~ThreadPool();
 
 	ThreadPool(const ThreadPool&) = delete;
 	ThreadPool& operator=(const ThreadPool&) = delete;
@@ -45,40 +44,20 @@ public:
 
 public:
 	template<typename Func, typename ...Args>
-	auto AddTask(Func&& f, Args&&...args) -> std::future<decltype(f(args...))>
+	auto AddTask(Func&& f, Args&&...args)
 	{
-		// Мы получили функцию и ее аргументы. Тип функции -- decltype(f(args...))(Args...).
+		using ReturnType = std::invoke_result_t<std::decay_t<Func>, std::decay_t<Args>...>;
 		
-		// Сначала преобразуем ее в функцию единого типа -- decltype(f(args...))(void).
+		// Сначала преобразуем исходную функцию в функцию единого типа -- ReturnType(void).
 		// Затем упакуем ее в std::packaged_task, чтобы вернуть std::future.
-		auto taskPtr = std::make_shared<std::packaged_task<decltype(f(args...))(void)>>(
-			std::bind(std::forward<Func>(f), std::forward<Args...>(args...))
+		// shared_ptr нужен для упаковки movable-only объектов, типа unique_ptr.
+		auto taskPtr = std::make_shared<std::packaged_task<ReturnType(void)>>(
+			std::bind(std::forward<Func>(f), std::forward<Args>(args)...)
 		);
 
 		// Создаем функцию, где выполнится тело std::packaged_task, и кладем ее в очередь на выполнение.
 		// Функция имеет прототип void(void), потому что std::packaged_task::operator()() возвращает void.
 		auto foo = std::function<void(void)>([taskPtr]{ (*taskPtr)(); });
-
-		// Положим задачу в рабочий поток
-		m_queue.push(std::move(foo));
-
-		// Наружу возвращаем std::future, из которой позже можно будет вытянуть результат.
-		return taskPtr->get_future();
-	}
-
-	template<typename Func>
-	auto AddTask(Func&& f) -> std::future<decltype(f())>
-	{
-		// Мы получили функцию без аргументов. Тип функции -- decltype(f())(void).
-
-		// Упакуем ее в std::packaged_task, чтобы вернуть std::future.
-		auto taskPtr = std::make_shared<std::packaged_task<decltype(f())(void)>>(
-			std::forward<Func>(f)
-		);
-
-		// Создаем функцию, где выполнится тело std::packaged_task, и кладем ее в очередь на выполнение.
-		// Функция имеет прототип void(void), потому что std::packaged_task::operator()() возвращает void.
-		auto foo = std::function<void(void)>([taskPtr] { (*taskPtr)(); });
 
 		// Положим задачу в рабочий поток
 		m_queue.push(std::move(foo));
@@ -96,5 +75,5 @@ private:
 	std::atomic_bool m_stopping{ false };
 	std::vector<std::thread> m_workers;
 
-	Queue<std::function<void(void)>> m_queue;
+	TasksQueue<std::function<void(void)>> m_queue;
 };

@@ -3,6 +3,9 @@
 ThreadPool::ThreadPool(size_t threads)
 	: m_poolSize(threads)
 {
+	if (0 == m_poolSize)
+		throw std::invalid_argument("Pool can't contain 0 threads");
+
 	m_workers.reserve(m_poolSize);
 	for (size_t i = 0; i < m_poolSize; ++i)
 		m_workers.emplace_back([this] { WorkerThread(); });
